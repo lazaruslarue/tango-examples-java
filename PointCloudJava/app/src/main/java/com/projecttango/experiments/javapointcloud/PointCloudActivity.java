@@ -34,11 +34,13 @@ import com.google.atap.tango.ux.TangoUxLayout;
 
 
 import android.app.Activity;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager.NameNotFoundException;
 import android.opengl.GLSurfaceView;
 import android.os.Bundle;
+import android.os.Environment;
 import android.util.Log;
 import android.view.MotionEvent;
 import android.view.View;
@@ -47,15 +49,21 @@ import android.widget.Button;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import java.io.BufferedWriter;
+import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.FileWriter;
 import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.FloatBuffer;
 import java.text.DecimalFormat;
 import java.util.ArrayList;
 
 /**
  * Main Activity class for the Point Cloud Sample. Handles the connection to the {@link Tango}
  * service and propagation of Tango XyzIj data to OpenGL and Layout views. OpenGL rendering logic is
- * delegated to the {@link PCrenderer} class.
+ * delegated to the {@link PCRenderer} class.
  */
 public class PointCloudActivity extends Activity implements OnClickListener {
 
@@ -101,7 +109,6 @@ public class PointCloudActivity extends Activity implements OnClickListener {
     private static final int UPDATE_INTERVAL_MS = 100;
     public static Object poseLock = new Object();
     public static Object depthLock = new Object();
-
 
     /*
      * This is an advanced way of using UX exceptions. In most cases developers can just use the in
@@ -183,7 +190,6 @@ public class PointCloudActivity extends Activity implements OnClickListener {
         mTangoUxLayout = (TangoUxLayout) findViewById(R.id.layout_tango);
         mTangoUx = new TangoUx.Builder(this).setTangoUxLayout(mTangoUxLayout).build();
         mTangoUx.setUxExceptionEventListener(mUxExceptionListener);
-
 
         int maxDepthPoints = mConfig.getInt("max_point_cloud_elements");
         mRenderer = new PCRenderer(maxDepthPoints);
@@ -369,7 +375,7 @@ public class PointCloudActivity extends Activity implements OnClickListener {
                     mCurrentTimeStamp = (float) xyzIj.timestamp;
                     mPointCloudFrameDelta = (mCurrentTimeStamp - mXyIjPreviousTimeStamp)
                             * SECS_TO_MILLISECS;
-                    mXyIjPreviousTimeStamp = mCurrentTimeStamp;
+
                     try {
                         TangoPoseData pointCloudPose = mTango.getPoseAtTime(mCurrentTimeStamp,
                              framePairs.get(0));
@@ -377,6 +383,35 @@ public class PointCloudActivity extends Activity implements OnClickListener {
                         if(!mRenderer.isValid()){
                             return;
                         }
+
+                        if(mPointCloudFrameDelta > 5000 || mXyIjPreviousTimeStamp==0) {
+                            mXyIjPreviousTimeStamp = mCurrentTimeStamp;
+                            Log.v("mXyIjPreviousTimeStamp", Float.toString(mXyIjPreviousTimeStamp));
+                            //mCloudManager.SaveToFile(getFilesDir(), xyzIj.xyz);
+                            try {
+                                File wallpaperDirectory = new File(Environment.getExternalStorageDirectory() + "/tango/");
+                                File outputFile = new File(wallpaperDirectory, "point_cloud.txt");
+//                                FileOutputStream fos = new FileOutputStream(outputFile);
+//                                FloatBuffer floatbuffer = xyzIj.xyz;
+//                                ByteBuffer byteBuffer = ByteBuffer.allocate(floatbuffer.capacity() * 4);
+//                                byteBuffer.asFloatBuffer().put(floatbuffer);
+//                                byte[] data = byteBuffer.array();
+
+                                BufferedWriter writer = new BufferedWriter(new FileWriter(outputFile));
+
+                                for (int i = 0; i < xyzIj.xyz.capacity(); i++) {
+                                    writer.write(Float.toString(xyzIj.xyz.get(i)));
+                                }
+
+                                //fos.write(data);
+                                writer.close();
+//                                fos.close();
+                            } catch (IOException e) {
+                                e.printStackTrace();
+                            }
+
+                        }
+
                         mRenderer.getPointCloud().UpdatePoints(xyzIj.xyz);
                         mRenderer.getModelMatCalculator().updatePointCloudModelMatrix(
                                         pointCloudPose.getTranslationAsFloats(),
